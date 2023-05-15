@@ -13,7 +13,7 @@ def load():
     import pandas as pd
 
 
-def make_simulation_df(num_rows):
+def make_simulation_df(num_rows, pheno_list = ['A','B','C']):
     import numpy as np
     import pandas as pd
     # Create a random array of x values between 1 and 10
@@ -23,7 +23,7 @@ def make_simulation_df(num_rows):
     y = np.random.randint(1, 10**5, size=num_rows)
     
     # Create a random array of phenotype values
-    phenotypes = np.random.choice(['A', 'B', 'C'], size=num_rows)
+    phenotypes = np.random.choice(pheno_list, size=num_rows)
     
     # Create a dictionary with the data
     data = {'x': x, 'y': y, 'phenotype': phenotypes}
@@ -186,11 +186,12 @@ def test_category_numeric(df, category_cols, numeric_cols):
     import scipy.stats as stats
     # Initialize an empty dictionary to store the test results
     test_results = {}
-    
+    test= ''
     # Loop through each category column
     for category_col in category_cols:
         # Loop through each numeric column
         for numeric_col in numeric_cols:
+            print(category_col , numeric_col)
             # Get the unique values in the category column
             unique_cats = df[category_col].unique()
             
@@ -204,13 +205,15 @@ def test_category_numeric(df, category_cols, numeric_cols):
                     test_result = stats.ttest_ind(df[df[category_col] == unique_cats[0]][numeric_col], 
                                                   df[df[category_col] == unique_cats[1]][numeric_col],
                                                   equal_var=False)
+                test = 't-test'
             # If there are more than 2 unique values in the category column
             else:
                 # Perform ANOVA-oneway test
                 test_result = stats.f_oneway(*[df[df[category_col] == cat][numeric_col] for cat in unique_cats])
+                test = 'ANOVA oneway'
             
             # Store the test result in the test_results dictionary
-            test_results[(category_col, numeric_col)] = test_result
+            test_results[(category_col, numeric_col,test)] = test_result
             
     # Return the test results as a DataFrame
     test_results_df = pd.DataFrame(test_results, index=['test_statistic', 'p_value']).T
@@ -226,6 +229,7 @@ def plot_signif_cat_num(data, signif_table, plot = 'box', threshold = 0.05):
     import pandas as pd
     import scipy.stats as stats
     import seaborn as sns
+    import matplotlib.pyplot as plt
 
     signif_data = signif_table[signif_table['p_value'] < threshold]
 
@@ -236,8 +240,250 @@ def plot_signif_cat_num(data, signif_table, plot = 'box', threshold = 0.05):
 
         # Create the violin plot
         if plot in ['box','boxplot']:
-            sns.boxplot(x=category, y=value, data=data)
+            g = sns.boxplot(x=category, y=value, data=data)
         elif plot == 'violin':
-            sns.violinplot(x=category, y=value, data=data)
-            plt.show()
+            g = sns.violinplot(x=category, y=value, data=data)
+        g.set_title('pVal: {}, test: {}'.format( round(row['p_value'], 4),row['level_2'] ))
+        plt.show()
         # plt.plot([category-0.2, category+0.2], [value, value], linewidth=3, color='black')
+
+
+
+def test_significance_num(df, numerical_cols, test_name):
+    """
+    Perform a selected statistical test on multiple numerical columns of a given DataFrame
+    and return a table of pairs of variables and their significance.
+    
+    Parameters:
+        df (pd.DataFrame): The input DataFrame containing the numerical columns to be tested.
+        numerical_cols (list): A list of column names to be used as the numerical variables.
+        test_name (str): The name of the statistical test to be performed.
+    
+    Returns:
+        pd.DataFrame: A table of pairs of variables and their significance.
+    """
+    from scipy.stats import pearsonr, spearmanr, kendalltau
+
+    # Initialize an empty list to store the test results
+    test_results = []
+    
+    # Loop through all pairs of numerical columns and perform the selected test
+    for i in range(len(numerical_cols)):
+        for j in range(i+1, len(numerical_cols)):
+            col1 = numerical_cols[i]
+            col2 = numerical_cols[j]
+            
+            # Calculate correlation coefficients and p-values
+            pearson_r, pearson_p = pearsonr(df[col1], df[col2])
+            spearman_rho, spearman_p = spearmanr(df[col1], df[col2])
+            kendall_tau, kendall_p = kendalltau(df[col1], df[col2])
+            
+            # Return results as a dictionary
+            result = {'V1': col1,'V2': col2,
+                    'Pearson_p': pearson_p,
+                    'Spearman_rho': spearman_rho, 'Spearman_p': spearman_p,
+                    'Kendall_tau': kendall_tau, 'Kendall_p': kendall_p}
+            # print(result)
+            # Append the test results to the list
+            test_results.append([col1, col2, pearson_p, spearman_rho,  spearman_p, kendall_tau, kendall_p])
+    print(test_results)
+    # Convert the list of test results to a DataFrame and return it
+    return pd.DataFrame(test_results, columns=['Variable 1', 'Variable 2', 'Pearson_p', 'Spearman_rho', 'Spearman_p', 'Kendall_tau', 'Kendall_p'])
+
+
+def plot_correlation_heatmap(corr_df, alpha=0.05):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    """
+    Plot a heatmap of the significant correlations between numerical variables in a given DataFrame.
+    
+    Parameters:
+        df (pd.DataFrame): The input DataFrame containing the numerical columns to be tested.
+        numerical_cols (list): A list of column names to be used as the numerical variables.
+        test_name (str): The name of the statistical test to be performed.
+        alpha (float): The significance level to use for determining significance.
+    
+    Returns:
+        None
+    """
+    # Filter the correlations that are statistically significant
+    sig_corr = corr_df[(corr_df['Pearson_p'] < alpha) | (corr_df['Spearman_p'] < alpha) | (corr_df['Kendall_p'] < alpha)]
+    
+    # Create a pivot table of the significant correlations
+    corr_pivot = sig_corr.pivot(index='Variable 1', columns='Variable 2', values='Spearman_rho')
+
+    # Plot the heatmap
+    sns.heatmap(corr_pivot, cmap='coolwarm', annot=True, center=0)
+    plt.title(f"Significant correlations")
+    plt.show()
+
+def plot_correlations(df, correlation_df, pVal_name=  'Pearson_p',  threshold=0.05 , clr = 'red'):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    """
+    Create scatterplots and linear regression lines between pairs of variables in a DataFrame
+    where the p-value of their correlation is less than a specified threshold.
+    
+    Parameters:
+        df (pd.DataFrame): The input DataFrame containing the numerical variables.
+        correlation_df (pd.DataFrame): A table of pairs of variables and their p-values.
+        pVal_name=  'Pearson_p' | 'Spearman_p' | Kendall_p
+        threshold (float): The maximum p-value for a correlation to be considered significant.
+    
+    Returns:
+        None: Displays the scatterplots and regression lines.
+    """
+    # Filter the correlation DataFrame by the specified threshold
+    significant_corrs = correlation_df[correlation_df[pVal_name] < threshold]
+    
+    # Loop through all pairs of significant correlations and create scatterplots and regression lines
+    for i, row in significant_corrs.iterrows():
+        var1, var2, pval = row[0], row[1], row[pVal_name]
+        sns.lmplot(data=df, x=var1, y=var2, line_kws={'color': clr})
+        plt.title(f'{var1} vs. {var2} (p={pval:.3f})')
+        plt.show()
+
+
+
+def test_significance_cat(df, category_cols):
+    import pandas as pd
+    import scipy.stats as stats
+    """
+    Perform a chi-squared test or a Fisher's exact test on pairs of categorical columns in a given DataFrame
+    and return a table of pairs of variables and their significance.
+    
+    Parameters:
+        df (pd.DataFrame): The input DataFrame containing the categorical columns to be tested.
+        category_cols (list): A list of column names to be used as the categorical variables.
+    
+    Returns:
+        pd.DataFrame: A table of pairs of variables and their significance.
+    """
+    # Initialize an empty list to store the test results
+    test_results = []
+    
+    # Loop through all pairs of categorical columns and perform the appropriate test
+    for i in range(len(category_cols)):
+        for j in range(i+1, len(category_cols)):
+            col1 = category_cols[i]
+            col2 = category_cols[j]
+            
+            # Create a contingency table of the two categorical variables
+            contingency_table = pd.crosstab(df[col1], df[col2])
+            
+            # Check the size of the contingency table
+            n_rows, n_cols = contingency_table.shape
+            if n_rows == 2 and n_cols == 2:
+                # If the table is 2x2, perform Fisher's exact test
+                oddsratio, pvalue = stats.fisher_exact(contingency_table)
+            else:
+                # Otherwise, perform the chi-squared test
+                chi2, pvalue, dof, expected = stats.chi2_contingency(contingency_table)
+            
+            # Return results as a dictionary
+            result = {'V1': col1,'V2': col2, 'P-Value': pvalue}
+            
+            # Append the test results to the list
+            test_results.append([col1, col2, pvalue])
+    
+    # Convert the list of test results to a DataFrame and return it
+    return pd.DataFrame(test_results, columns=['Variable 1', 'Variable 2', 'P-Value'])
+
+
+def plot_cat_diff(df, significance_df, threshold=0.05, cmap="vlag"):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    """
+    Visualize the differences between all categorical columns in the given DataFrame
+    based on the significance results from `test_significance_cat` function.
+
+    Parameters:
+        df (pd.DataFrame): The input DataFrame containing the categorical columns to be compared.
+        significance_df (pd.DataFrame): A table of pairs of variables and their significance, obtained from `test_significance_cat` function.
+        threshold (float, optional): The significance threshold to use for plotting. Default is 0.05.
+
+    Returns:
+        None.
+    """
+    # Filter the pairs of variables with significant differences based on the threshold
+    sig_pairs = significance_df.loc[significance_df['P-Value'] <= threshold, ['Variable 1', 'Variable 2']]
+    
+    # Loop through all pairs of categorical columns and plot the differences
+    for i in range(len(df.columns)):
+        for j in range(i+1, len(df.columns)):
+            col1 = df.columns[i]
+            col2 = df.columns[j]
+            
+            # Check if the pair of variables is significant
+            if ((col1 in sig_pairs.values[:,0]) and (col2 in sig_pairs.values[:,1])) or ((col1 in sig_pairs.values[:,1]) and (col2 in sig_pairs.values[:,0])):
+                # Create a frequency table of the two columns
+                table = pd.crosstab(df[col1], df[col2])
+                
+                # Plot the frequency table as a heatmap using seaborn
+                ax = sns.heatmap(table, cmap=cmap, annot=True, fmt='d', cbar=False, cbar_kws={"label": "Correlation coefficient"})
+
+                # Set plot title and axis labels
+                plt.title(f"{col1} vs {col2}")
+                plt.xlabel(col2)
+                plt.ylabel(col1)
+                
+                # Show the plot
+                plt.show()
+                
+
+
+def plot_network(coordinates, edges, col_type, size_nodes=10, x = 'x', y='y', cmap_nodes='Spectral', edges_color='gray'):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    """
+    Plot a network using seaborn based on node coordinates, edges, and node types.
+    
+    Parameters:
+        coordinates (pd.DataFrame): A DataFrame containing the x, y, and type columns for each node.
+        edges (list of tuples): A list of tuples containing the source and target indices for each edge.
+        col_type (str): The name of the column in the coordinates DataFrame that contains the node types.
+        size_nodes (int): The size of the nodes in the plot.
+        cmap_nodes (str): The name of the colormap to use for the node types.
+        edges_color (str): The color to use for the edges.
+    """
+
+    # Create a dictionary mapping node types to integers
+    type_dict = {t: i for i, t in enumerate(coordinates[col_type].unique())}
+    
+    # Create a list of node colors based on the node types
+    node_colors = coordinates[col_type].map(type_dict)
+    
+    # Create a dictionary mapping node indices to coordinates
+    pos_dict = {i: (coordinates.loc[i, x], coordinates.loc[i, y]) for i in range(len(coordinates))}
+    
+    # Create the plot using seaborn
+    sns.set_style("white")
+    # sns.set(rc={'axes.facecolor': 'lightgray', 'figure.facecolor': 'white'})
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    sns.scatterplot(x=x, y=y, hue=node_colors, style=node_colors, palette=cmap_nodes, s=size_nodes,
+                    edgecolor='black', linewidth=0.5, alpha=0.8, data=coordinates, ax=ax)
+    
+    # Draw the edges on the plot
+    for edge in edges.iterrows():
+        source = pos_dict[edge[1][0]]
+        target = pos_dict[edge[1][1]]
+        ax.plot([source[0], target[0]], [source[1], target[1]], color=edges_color, linewidth=0.5)
+        
+    # Add a legend to the plot
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles, type_dict.keys(), title=col_type, loc='upper right', bbox_to_anchor=(1.15, 1))
+        
+    # remove x and y tick labels
+    plt.xticks([])
+    plt.yticks([])
+    # remove x and y axes
+    sns.set(style="ticks", rc={"axes.grid":False})
+    # sns.despine(bottom=True, left=True)
+
+    plt.xlabel('')
+    plt.ylabel('')
+
+    # Set the axis labels and title
+    ax.set_title('Network Plot')
+    plt.show()
