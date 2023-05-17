@@ -222,7 +222,7 @@ def test_category_numeric(df, category_cols, numeric_cols):
 
 
 
-def plot_signif_cat_num(data, signif_table, plot = 'box', threshold = 0.05):
+def plot_signif_cat_num(data, signif_table, plot = 'box', threshold = 0.05, figsize=(10, 5)):
 
     import itertools
     from scipy.stats import f_oneway, ttest_ind, zscore
@@ -235,17 +235,21 @@ def plot_signif_cat_num(data, signif_table, plot = 'box', threshold = 0.05):
 
     # Add markers for significant p-values
     for index, row in signif_data.iterrows():
-        category = row['level_0']
-        value = row['level_1']
-
-        # Create the violin plot
-        if plot in ['box','boxplot']:
-            g = sns.boxplot(x=category, y=value, data=data)
-        elif plot == 'violin':
-            g = sns.violinplot(x=category, y=value, data=data)
-        g.set_title('pVal: {}, test: {}'.format( round(row['p_value'], 4),row['level_2'] ))
-        plt.show()
-        # plt.plot([category-0.2, category+0.2], [value, value], linewidth=3, color='black')
+        try:
+            category = row['level_0']
+            value = row['level_1']
+            plt.figure(figsize=figsize)
+            # Create the violin plot
+            if plot in ['box','boxplot']:
+                g = sns.boxplot(x=category, y=value, data=data)
+            elif plot == 'violin':
+                g = sns.violinplot(x=category, y=value, data=data)
+            g.set_title('pVal: {}, test: {}'.format( round(row['p_value'], 4),row['level_2'] ))
+            plt.xticks(rotation=90)
+            plt.show()
+            # plt.plot([category-0.2, category+0.2], [value, value], linewidth=3, color='black')
+        except:
+            pass
 
 
 
@@ -270,22 +274,25 @@ def test_significance_num(df, numerical_cols, test_name):
     # Loop through all pairs of numerical columns and perform the selected test
     for i in range(len(numerical_cols)):
         for j in range(i+1, len(numerical_cols)):
-            col1 = numerical_cols[i]
-            col2 = numerical_cols[j]
-            
-            # Calculate correlation coefficients and p-values
-            pearson_r, pearson_p = pearsonr(df[col1], df[col2])
-            spearman_rho, spearman_p = spearmanr(df[col1], df[col2])
-            kendall_tau, kendall_p = kendalltau(df[col1], df[col2])
-            
-            # Return results as a dictionary
-            result = {'V1': col1,'V2': col2,
-                    'Pearson_p': pearson_p,
-                    'Spearman_rho': spearman_rho, 'Spearman_p': spearman_p,
-                    'Kendall_tau': kendall_tau, 'Kendall_p': kendall_p}
-            # print(result)
-            # Append the test results to the list
-            test_results.append([col1, col2, pearson_p, spearman_rho,  spearman_p, kendall_tau, kendall_p])
+            try:
+                col1 = numerical_cols[i]
+                col2 = numerical_cols[j]
+                
+                # Calculate correlation coefficients and p-values
+                pearson_r, pearson_p = pearsonr(df[col1], df[col2])
+                spearman_rho, spearman_p = spearmanr(df[col1], df[col2])
+                kendall_tau, kendall_p = kendalltau(df[col1], df[col2])
+                
+                # Return results as a dictionary
+                result = {'V1': col1,'V2': col2,
+                        'Pearson_p': pearson_p,
+                        'Spearman_rho': spearman_rho, 'Spearman_p': spearman_p,
+                        'Kendall_tau': kendall_tau, 'Kendall_p': kendall_p}
+                # print(result)
+                # Append the test results to the list
+                test_results.append([col1, col2, pearson_p, spearman_rho,  spearman_p, kendall_tau, kendall_p])
+            except:
+                pass
     print(test_results)
     # Convert the list of test results to a DataFrame and return it
     return pd.DataFrame(test_results, columns=['Variable 1', 'Variable 2', 'Pearson_p', 'Spearman_rho', 'Spearman_p', 'Kendall_tau', 'Kendall_p'])
