@@ -244,6 +244,8 @@ def plot_signif_cat_num(data, signif_table, plot = 'box', threshold = 0.05, figs
                 g = sns.boxplot(x=category, y=value, data=data)
             elif plot == 'violin':
                 g = sns.violinplot(x=category, y=value, data=data)
+            ax = sns.swarmplot(x=category, y=value, data=data, color=".25")
+
             g.set_title('pVal: {}, test: {}'.format( round(row['p_value'], 4),row['level_2'] ))
             plt.xticks(rotation=90)
             plt.show()
@@ -298,7 +300,7 @@ def test_significance_num(df, numerical_cols, test_name):
     return pd.DataFrame(test_results, columns=['Variable 1', 'Variable 2', 'Pearson_p', 'Spearman_rho', 'Spearman_p', 'Kendall_tau', 'Kendall_p'])
 
 
-def plot_correlation_heatmap(corr_df, alpha=0.05):
+def plot_correlation_heatmap(corr_df, alpha=0.05, figsize=[10,10]):
     import seaborn as sns
     import matplotlib.pyplot as plt
     """
@@ -318,11 +320,65 @@ def plot_correlation_heatmap(corr_df, alpha=0.05):
     
     # Create a pivot table of the significant correlations
     corr_pivot = sig_corr.pivot(index='Variable 1', columns='Variable 2', values='Spearman_rho')
+    fig, ax = plt.subplots(figsize=figsize)
 
     # Plot the heatmap
-    sns.heatmap(corr_pivot, cmap='coolwarm', annot=True, center=0)
+    sns.heatmap(corr_pivot, cmap='coolwarm')
     plt.title(f"Significant correlations")
     plt.show()
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Plot the heatmap
+    sns.clustermap(corr_pivot.fillna(corr_pivot.median().median()), cmap='coolwarm')
+    plt.title(f"Significant correlations")
+    plt.show()
+
+    return corr_pivot
+
+def plot_correlation_heatmap_P_Val(corr_df, pVal_col= 'P-Value', alpha=0.05, figsize=[10,10]):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    """
+    Plot a heatmap of the significant correlations between numerical variables in a given DataFrame.
+    
+    Parameters:
+        df (pd.DataFrame): The input DataFrame containing the numerical columns to be tested.
+        numerical_cols (list): A list of column names to be used as the numerical variables.
+        test_name (str): The name of the statistical test to be performed.
+        alpha (float): The significance level to use for determining significance.
+    
+    Returns:
+        None
+    """
+    # Filter the correlations that are statistically significant
+    sig_corr = corr_df[(corr_df[pVal_col] < alpha) ]
+    
+    # Create a pivot table of the significant correlations
+    corr_pivot = sig_corr.pivot(index='Variable 1', columns='Variable 2', values=pVal_col)
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Plot the heatmap
+    sns.heatmap(corr_pivot, cmap='coolwarm')
+    plt.title(f"Significant correlations")
+    plt.show()
+
+
+    # Plot the heatmap
+    sns.clustermap(corr_pivot.fillna(corr_pivot.median().median()), cmap='coolwarm', figsize=figsize)
+    plt.title(f"Significant correlations")
+    plt.show()
+
+    return corr_pivot
+
+
+def correlation_matrix(corr_df, alpha=0.05, figsize=[10,10]):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    sig_corr = corr_df[(corr_df['Pearson_p'] < alpha) | (corr_df['Spearman_p'] < alpha) | (corr_df['Kendall_p'] < alpha)]
+    corr_pivot = sig_corr.pivot(index='Variable 1', columns='Variable 2', values='Spearman_rho')
+
+    return corr_pivot
 
 def plot_correlations(df, correlation_df, pVal_name=  'Pearson_p',  threshold=0.05 , clr = 'red'):
     import seaborn as sns
@@ -462,7 +518,7 @@ def plot_network(coordinates, edges, col_type, size_nodes=10, x = 'x', y='y', cm
     
     # Create a dictionary mapping node indices to coordinates
     pos_dict = {i: (coordinates.loc[i, x], coordinates.loc[i, y]) for i in range(len(coordinates))}
-    
+    print(pos_dict)
     # Create the plot using seaborn
     sns.set_style("white")
     # sns.set(rc={'axes.facecolor': 'lightgray', 'figure.facecolor': 'white'})
@@ -494,3 +550,36 @@ def plot_network(coordinates, edges, col_type, size_nodes=10, x = 'x', y='y', cm
     # Set the axis labels and title
     ax.set_title('Network Plot')
     plt.show()
+
+
+
+import pandas as pd
+import numpy as np
+
+def calculate_edges_dist(coords, edges, x = 'Pos_X', y = 'Pos_Y'):
+    # Compute the distance between connected nodes
+    distances = []
+    for _, edge in edges.iterrows():
+        source = edge['source']
+        target = edge['target']
+        source_coord = coords.loc[source, [x,y]].values
+        target_coord = coords.loc[target, [x,y]].values
+        distance = np.linalg.norm(target_coord - source_coord)
+        distances.append(distance)
+
+    # Add distances as a new column in the edges DataFrame
+    edges['distance'] = distances
+    return edges
+
+def filter_edges_dist(edges, threshold_p = -1, threshold = 20, dist_col = 'distance'):
+    """
+    threshold (float): The threshold distance above which edges are removed.
+    # threshold_p: threshold percentage of data
+    # threshold: threshold value in micrometer
+    """
+    # Remove edges with a distance above the threshold
+    if threshold_p > 0:
+        threshold = df['values'].quantile(threshold_p)
+    edges = edges[edges[dist_col] <= threshold]
+
+    return edges
