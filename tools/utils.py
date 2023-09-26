@@ -495,7 +495,7 @@ def plot_cat_diff(df, significance_df, threshold=0.05, cmap="vlag"):
                 
 
 
-def plot_network(coordinates, edges, col_type, size_nodes=10, x = 'x', y='y', cmap_nodes='Spectral', edges_color='gray'):
+def plot_network(coordinates, edges, col_type, size_nodes=10, x = 'x', y='y', cmap_nodes='Spectral', edges_color='gray', figureSize=(10, 8)):
     import seaborn as sns
     import matplotlib.pyplot as plt
     """
@@ -518,11 +518,11 @@ def plot_network(coordinates, edges, col_type, size_nodes=10, x = 'x', y='y', cm
     
     # Create a dictionary mapping node indices to coordinates
     pos_dict = {i: (coordinates.loc[i, x], coordinates.loc[i, y]) for i in range(len(coordinates))}
-    print(pos_dict)
+    # print(pos_dict)
     # Create the plot using seaborn
     sns.set_style("white")
     # sns.set(rc={'axes.facecolor': 'lightgray', 'figure.facecolor': 'white'})
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = plt.subplots(figsize=figureSize)
 
     sns.scatterplot(x=x, y=y, hue=node_colors, style=node_colors, palette=cmap_nodes, s=size_nodes,
                     edgecolor='black', linewidth=0.5, alpha=0.8, data=coordinates, ax=ax)
