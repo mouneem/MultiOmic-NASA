@@ -10,14 +10,14 @@ def load():
     print('Loaded !')
 
 # Filter a DataFrame based on given conditions.
-def qc_filter(qc_file, filter_dict, output_type='all'):
+def qc_filter(qc_file, filter_dict, output_type='all', sep = '\t'):
     """ args:
     - qc_dataframe (pd.DataFrame): The input DataFrame.
     - filter_dict (dict): A dictionary where keys are column names, and values are conditions for filtering.
     - output_type (str, optional): Specify 'all' to return the entire DataFrame, or provide a specific column name to return only that column. Default is 'all'.
     """
     qc_file = qc_file
-    qc_dataframe = pd.read_csv( qc_file , sep = '\t')
+    qc_dataframe = pd.read_csv( qc_file , sep = sep)
     # Apply filters to the DataFrame
     nrows = qc_dataframe.shape[0]
     for column, values in filter_dict.items():
@@ -141,24 +141,33 @@ def remove_column(df, column_name):
     return df
 
 # Count the occurrences of each phenotype in a DataFrame and visualize the counts.
-def count_phenotype(path, phenotype_col, normalize=True, export_count_path=False):
+def count_phenotype(path, phenotype_col, normalize=True, export_count_path=False , sep = ',' , select_roi = False):
     """
     Parameters:
     - path (str): The path to the input file containing the DataFrames.
     - phenotype_col (str): The column name representing phenotypes.
     - normalize (bool, optional): If True, normalize the counts to percentages. Default is True.
     - export_coords_path (str, optional): File path for exporting the coordinates DataFrame. Default is False.
+    - select_roi (list) colname | value to select
     """
     phenotypes_counts = []
     # for filename in os.listdir(path) :
     files = os.listdir(path)
     for filename in tqdm.tqdm(files, desc='Reading coordinate files...'):
         # Read the DataFrame from the input file
-        df = pd.read_csv(os.path.join(path, filename))  # You can adjust this based on the actual file format
+        df = pd.read_csv(os.path.join(path, filename), sep = sep)  # You can adjust this based on the actual file format
+        if select_roi:
+            idx = df[select_roi[0]] == select_roi[1]
+            df = df.loc[idx,:]
         # Count occurrences of each phenotype
-        phenotypes_count = df[phenotype_col].value_counts(normalize=normalize)
+        if  isinstance(phenotype_col, (int)):
+            phenotypes_count = df.iloc[:,phenotype_col].value_counts(normalize=normalize)
+            pass
+        else:
+            phenotypes_count = df[phenotype_col].value_counts(normalize=normalize)
         phenotypes_count['filename'] = filename
         phenotypes_counts.append(phenotypes_count)
+        
 
     phenotypes_counts = pd.DataFrame(phenotypes_counts)
     phenotypes_counts.index = phenotypes_counts['filename']
@@ -169,7 +178,7 @@ def count_phenotype(path, phenotype_col, normalize=True, export_count_path=False
     return phenotypes_counts
 
 # Plot a heatmap from a DataFrame using seaborn.
-def plot_heatmap(count_matrix, figsize=[20, 6], export_fig=False, cluster_row=True, cluster_col=True, fillna=0, cmap='Spectral', font_scale = 1, title = 'Heatmap', linewidths=0, clinical = False, merge_column_inClinical = 'Patient', col_toRemove= [''], merge_column_inCount='patient', extract_sample_pattern=r'([A-Za-z0-9-]+)_', extract_patient_pattern=r'([A-Za-z0-9-]+-[A-Za-z0-9-]+-[A-Za-z0-9-]+)+-FIXT-\d+-IMC\d+-\d+_\#\w'):
+def plot_heatmap(count_matrix, figsize=[20, 6], export_fig=False, cluster_row=True, cluster_col=True, fillna=0, cmap='Spectral', font_scale = 1, title = 'Heatmap', linewidths=0, clinical = False, merge_column_inClinical = 'Patient', col_toRemove= [''], merge_column_inCount='patient', extract_sample_pattern=False, extract_patient_pattern=False , method = 'average'):
     """
     Parameters:
     - count_matrix (pd.DataFrame): The input DataFrame.
@@ -194,7 +203,6 @@ def plot_heatmap(count_matrix, figsize=[20, 6], export_fig=False, cluster_row=Tr
         row_colors = {}
         sns.set(font_scale=0.8) 
 
-        display(CountMatrix_clinical.head())
         count_feat = CountMatrix_clinical[img_features]
         count_feat.index = CountMatrix_clinical[merge_column_inCount]
         
@@ -210,7 +218,7 @@ def plot_heatmap(count_matrix, figsize=[20, 6], export_fig=False, cluster_row=Tr
         row_colors = pd.DataFrame(row_colors)
         row_colors.index = CountMatrix_clinical[merge_column_inCount]
 
-        display(CountMatrix_clinical[img_features].head())
+        display(CountMatrix_clinical.head())
 
         count_feat = remove_column(count_feat, merge_column_inCount)
         count_feat = remove_column(count_feat, merge_column_inClinical)
@@ -224,10 +232,10 @@ def plot_heatmap(count_matrix, figsize=[20, 6], export_fig=False, cluster_row=Tr
         display(count_feat.head())
 
         # row_colors.index = count_matrix.index
-        clustermap = sns.clustermap(count_feat, figsize=[25, 8], cmap='Spectral_r')
+        clustermap = sns.clustermap(count_feat, figsize=figsize, cmap=cmap, method = method)
         plt.show()
 
-        clustermap = sns.clustermap(count_feat, figsize=[25, 8], row_colors = row_colors, cmap='Spectral_r')
+        clustermap = sns.clustermap(count_feat, figsize=figsize, row_colors = row_colors, cmap=cmap, method = method)
         plt.show()
 
 
@@ -237,10 +245,9 @@ def plot_heatmap(count_matrix, figsize=[20, 6], export_fig=False, cluster_row=Tr
             count_matrix_filled,
             figsize=figsize,
             cmap=cmap,
-            method='average',
             row_cluster=cluster_row,
             col_cluster=cluster_col,
-            linewidths=linewidths,
+            linewidths=linewidths, method = method
         )
         
     # Set plot title
@@ -285,7 +292,7 @@ def plot_boxplot(matrix, figsize=[20, 6], export_fig=False, fillna=0, cmap='Spec
         print("Input matrix must be a DataFrame for Seaborn boxplot.")
 
 
-def merge_count_clinical(count_matrix, clinical, merge_column_inClinical='Patient', merge_column_inCount='patient', extract_sample_pattern=r'([A-Za-z0-9-]+)_', extract_patient_pattern=r'([A-Za-z0-9-]+-FIXT-\d+)-IMC\d+-\d+_\#\w'):
+def merge_count_clinical(count_matrix, clinical, merge_column_inClinical='Patient', merge_column_inCount='patient', extract_sample_pattern=False, extract_patient_pattern=False):
     # Extract sample names and patient names from the index
     if extract_sample_pattern:
         count_matrix['sample'] = count_matrix.index.to_series().str.extract(extract_sample_pattern)
@@ -478,10 +485,14 @@ def plot_statistical_results(result_table, CountMatrix_clinical, threshold=0.05,
                               jitter=True, dodge=True, alpha=jitter_alpha)
 
                 # Add count annotations on top of each violin
+                skip = 0
                 for i, group in enumerate(CountMatrix_clinical[clinical_col].unique()):
                     count = CountMatrix_clinical[CountMatrix_clinical[clinical_col] == group][molecular_col].count()
-                    ax.text(i, ax.get_ylim()[count_pos] + count_adj, f'n={count}', ha='center', va='bottom',
+                    if count > 0:
+                        ax.text(i - skip, ax.get_ylim()[count_pos] + count_adj, f'n={count}', ha='center', va='bottom',
                             color=count_color, fontsize=count_fontsize)
+                    else:
+                        skip += 1
 
                 plt.title(test_result + f"\n(p-value: {pval:.4f}, Stat Value: {stat_value:.4f})")
                 plt.tight_layout()
